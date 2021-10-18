@@ -1,0 +1,11 @@
+task :default => :build
+
+task :build do
+	sh "bundle install --path vendor/bundle --without development"
+	# Nuke the gem files themselves, we don't need those and they take
+	# up half the space in the archive
+	sh "rm -rf ./vendor/bundle/ruby/2.7.0/cache/*"
+
+	File.unlink("../lacme.zip") rescue nil
+	sh "zip -Xr ../lacme.zip lacme.rb vendor"
+end

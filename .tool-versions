@@ -1,0 +1,4 @@
+shellcheck 0.7.2
+terraform 1.0.9
+tfsec 0.58.14
+ruby 2.7.4

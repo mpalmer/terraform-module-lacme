@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+cleanup() {
+	echo -n "Cleaning up after test run..."
+	terraform destroy -auto-approve -input=false >>terraform.out
+	echo " done!"
+}
+
+trap cleanup EXIT
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+export TF_IN_AUTOMATION="ayup"
+
+echo -n "Running terraform (see terraform.out for progress)..."
+terraform init >terraform.out
+terraform apply -auto-approve -input=false >>terraform.out
+echo " done!"
+
+retries="20"
+
+echo -n "Looking for issued certificate in DynamoDB..."
+while [ "$retries" -gt "0" ]; do
+	if aws dynamodb get-item --table lacme-basic-test --key '{"k":{"S":"certificate"}}' --attributes-to-get k | grep -q certificate; then
+		break
+	fi
+	retries="$(("$retries"-1))"
+	echo -n "."
+	sleep 5
+done
+
+if [ "$retries" = "0" ]; then
+	echo -e " \e[31;1mFAIL!  Certificate was not found in DynamoDB\e[0m"
+	echo "You may wish to consult 'terraform.out' to see what happened."
+	exit 1
+else
+	echo -e "\e[32;1mSUCCESS!\e[0m"
+fi
+
+echo -n "Looking for private key in DynamoDB..."
+while [ "$retries" -gt "0" ]; do
+	if aws dynamodb get-item --table lacme-basic-test --key '{"k":{"S":"private_key"}}' --attributes-to-get k | grep -q private_key; then
+		break
+	fi
+	retries="$(("$retries"-1))"
+	echo -n "."
+	sleep 5
+done
+
+if [ "$retries" = "0" ]; then
+	echo -e " \e[31;1mFAIL!  Encrypted private key was not found in DynamoDB\e[0m"
+	echo "You may wish to consult 'terraform.out' to see what happened."
+	exit 1
+else
+	echo -e "\e[32;1mSUCCESS!\e[0m"
+fi
+
+echo -n "Making sure the certificate has made it to the load balancer..."
+cert_fqdn="$(terraform output -raw test_fqdn)"
+if openssl s_client -connect "${cert_fqdn}:443" -servername "$cert_fqdn" </dev/null 2>&1 | openssl x509 -noout -text | grep -q "Subject: CN = $cert_fqdn"; then
+	echo -e "\e[32;1mSUCCESS!\e[0m"
+else
+	echo -e " \e[31;1mFAIL!  HTTPS load balancer is not presenting the issued certificate\e[0m"
+	exit 1
+fi
