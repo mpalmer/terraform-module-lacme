@@ -132,7 +132,7 @@ resource "aws_dynamodb_table_item" "trigger_issue_cert_run" {
   # for needs to be modified.
   item = jsonencode({
     k = { S = "lambda_function_last_modified" },
-    v = { S = "${aws_lambda_function.issue_cert.last_modified}" },
+    v = { S = aws_lambda_function.issue_cert.last_modified },
   })
 
   # No point triggering an issue_cert run until everything is in place
